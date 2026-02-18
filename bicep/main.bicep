@@ -11,7 +11,7 @@
 //   1. az group create --name rg-openclaw --location swedencentral
 //   2. az deployment group create --resource-group rg-openclaw --template-file bicep/main.bicep --parameters bicep/main.bicepparam
 //   3. Verify: open appUrl output → ACA quickstart page
-//   4. ./bicep/deploy-openclaw.ps1 -ResourceGroup rg-openclaw -AppName ca-openclaw
+//   4. ./deploy-openclaw.ps1 -ResourceGroup rg-openclaw -AppName ca-openclaw
 // ---------------------------------------------------------------------------
 
 @description('Azure region for all resources.')

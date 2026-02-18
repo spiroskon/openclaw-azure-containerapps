@@ -58,7 +58,7 @@ az deployment group create --resource-group rg-openclaw `
   --template-file bicep/main.bicep --parameters bicep/main.bicepparam
 
 # 2. Build + deploy + configure (~10 min) — clones source, builds image, configures gateway
-.\bicep\deploy-openclaw.ps1 -ResourceGroup rg-openclaw
+.\deploy-openclaw.ps1 -ResourceGroup rg-openclaw
 
 # 3. GitHub Copilot auth (only interactive step)
 az containerapp exec --name ca-openclaw --resource-group rg-openclaw
