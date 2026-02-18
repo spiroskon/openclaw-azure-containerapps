@@ -36,6 +36,11 @@ Write-Host "  App:  $AppName" -ForegroundColor Green
 
 Write-Host "`n=== Step 1/3: Building OpenClaw image in ACR ===" -ForegroundColor Cyan
 Write-Host "This uploads source to Azure and builds remotely (~6 min)..."
+
+# Fix Unicode crash: az acr build streams pnpm progress output with Unicode
+# characters that crash Python's charmap codec on Windows (cp1252).
+$env:PYTHONIOENCODING = "utf-8"
+
 az acr build `
     --registry $AcrName `
     --image openclaw:latest `
