@@ -144,50 +144,46 @@ if ($LASTEXITCODE -ne 0) { throw "Container App update failed" }
 
 Remove-Item $yamlPath -ErrorAction SilentlyContinue
 
-Write-Host "`n=== Deployment complete ===" -ForegroundColor Green
+# Wait for the container to start
+Write-Host "`nWaiting for container to start..."
+Start-Sleep -Seconds 15
+
+Write-Host "`n=== Step 4/5: Configuring OpenClaw (non-interactive) ===" -ForegroundColor Cyan
+
+# Configure gateway — pass token as literal value (env var won't expand via --command)
+az containerapp exec --name $AppName --resource-group $ResourceGroup `
+    --command "node openclaw.mjs onboard --non-interactive --accept-risk --mode local --flow manual --auth-choice skip --gateway-port 18789 --gateway-bind lan --gateway-auth token --gateway-token $GatewayToken --skip-channels --skip-skills --skip-daemon --skip-health"
+
+# Set model
+az containerapp exec --name $AppName --resource-group $ResourceGroup `
+    --command "node openclaw.mjs models set github-copilot/claude-opus-4.6"
+
+# Enable Control UI token access
+az containerapp exec --name $AppName --resource-group $ResourceGroup `
+    --command "node openclaw.mjs config set gateway.controlUi.allowInsecureAuth true"
+
+Write-Host "`n=== Step 5/5: Gateway configured ===" -ForegroundColor Green
 $fqdn = az containerapp show --name $AppName --resource-group $ResourceGroup `
     --query "properties.configuration.ingress.fqdn" -o tsv 2>$null
 $rev = az containerapp show --name $AppName --resource-group $ResourceGroup `
     --query "properties.latestRevisionName" -o tsv 2>$null
 Write-Host ""
 Write-Host "  ┌─────────────────────────────────────────────────────────────────┐" -ForegroundColor Yellow
-Write-Host "  │  GATEWAY TOKEN (use in wizard step 3 and browser step 4):      │" -ForegroundColor Yellow
+Write-Host "  │  GATEWAY TOKEN:                                                │" -ForegroundColor Yellow
 Write-Host "  │  $GatewayToken  │" -ForegroundColor Yellow
 Write-Host "  └─────────────────────────────────────────────────────────────────┘" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "OpenClaw URL: https://$fqdn"
 Write-Host "Control UI:   https://$fqdn/#token=$GatewayToken"
 Write-Host ""
-Write-Host "=== Next: Configure OpenClaw (interactive) ===" -ForegroundColor Cyan
+Write-Host "=== One manual step remaining: GitHub Copilot auth ===" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "1. Connect to container:" -ForegroundColor Yellow
 Write-Host "   az containerapp exec --name $AppName --resource-group $ResourceGroup"
 Write-Host ""
-Write-Host "2. Inside the container, run these commands in order:" -ForegroundColor Yellow
-Write-Host "   node openclaw.mjs onboard                  # wizard (choices below)"
-Write-Host "   node openclaw.mjs models auth login-github-copilot"
-Write-Host "   node openclaw.mjs models set github-copilot/claude-opus-4.6"
-Write-Host "   node openclaw.mjs config set gateway.controlUi.allowInsecureAuth true"
-Write-Host "   exit"
+Write-Host "2. Inside the container:" -ForegroundColor Yellow
+Write-Host "   node openclaw.mjs models auth login-github-copilot" -ForegroundColor White
+Write-Host "   (open browser, enter code, authorize, then type: exit)"
 Write-Host ""
-Write-Host "3. Wizard choices (node openclaw.mjs onboard):" -ForegroundColor Yellow
-Write-Host "   Security warning      -> Yes"
-Write-Host "   Onboarding mode       -> Manual (NOT QuickStart)"
-Write-Host "   Gateway location      -> Local gateway"
-Write-Host "   Workspace directory   -> Enter (default)"
-Write-Host "   Gateway port          -> Enter (18789)"
-Write-Host "   Gateway bind          -> LAN (0.0.0.0)  ** CRITICAL **"
-Write-Host "   Gateway auth          -> Token"
-Write-Host "   Tailscale             -> Off"
-Write-Host "   Gateway token         -> " -NoNewline -ForegroundColor White
-Write-Host "PASTE THE TOKEN FROM THE BOX ABOVE" -ForegroundColor Red
-Write-Host "   Channels              -> No"
-Write-Host "   Skills                -> Yes, then Skip dependencies"
-Write-Host "   All API key prompts   -> No"
-Write-Host "   Hooks                 -> Skip"
-Write-Host "   How to hatch          -> Do this later"
-Write-Host "   Zsh completion        -> No"
-Write-Host ""
-Write-Host "4. Restart + verify:" -ForegroundColor Yellow
-Write-Host "   az containerapp revision restart --revision $rev --resource-group $ResourceGroup"
-Write-Host "   Wait 30s, then open Control UI URL above. Health OK = done."
+Write-Host "3. Open Control UI:" -ForegroundColor Yellow
+Write-Host "   https://$fqdn/#token=$GatewayToken"

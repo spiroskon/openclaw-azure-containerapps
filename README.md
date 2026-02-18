@@ -40,18 +40,12 @@ az group create --name rg-openclaw --location swedencentral
 az deployment group create --resource-group rg-openclaw `
   --template-file bicep/main.bicep --parameters bicep/main.bicepparam
 
-# 2. Build OpenClaw image + deploy (~6 min) — save the token from output
+# 2. Build + deploy + configure (~10 min) — save the token from output
 .\bicep\deploy-openclaw.ps1 -ResourceGroup rg-openclaw
 
-# 3. Configure (~5 min) — connect to container, then copy-paste these commands
+# 3. GitHub Copilot auth (only interactive step)
 az containerapp exec --name ca-openclaw --resource-group rg-openclaw
-# Inside the container — copy-paste this block:
-#   node openclaw.mjs onboard --non-interactive --accept-risk --mode local --flow manual \
-#     --auth-choice skip --gateway-port 18789 --gateway-bind lan --gateway-auth token \
-#     --gateway-token $OPENCLAW_GATEWAY_TOKEN --skip-channels --skip-skills --skip-daemon --skip-health
 #   node openclaw.mjs models auth login-github-copilot    → device flow in browser
-#   node openclaw.mjs models set github-copilot/claude-opus-4.6
-#   node openclaw.mjs config set gateway.controlUi.allowInsecureAuth true
 #   exit
 ```
 
