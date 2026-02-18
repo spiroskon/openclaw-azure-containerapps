@@ -148,96 +148,88 @@ The script auto-discovers the ACR and App names from the Bicep deployment output
 3. Updates the Container App with the full OpenClaw configuration (ACR auth, NFS volume mount, startup command, environment variables)
 4. Outputs the Control UI URL with the token
 
-### Step 3: Configure OpenClaw (interactive)
+### Step 3: Configure OpenClaw
 
-> **Use a standalone terminal** (Windows Terminal or PowerShell) for the wizard — VS Code's integrated terminal doesn't handle the TUI arrow-key menus reliably.
-
-#### 3a: Connect to the container
+Connect to the running container and configure the gateway, then authenticate GitHub Copilot.
 
 ```powershell
 az containerapp exec --name ca-openclaw --resource-group rg-openclaw
 ```
 
-Inside the shell, confirm the token that's already set:
+Inside the container shell, run these commands in order:
 
 ```sh
-echo $OPENCLAW_GATEWAY_TOKEN
+# 1. Configure gateway (non-interactive — uses the token already set by deploy script)
+node openclaw.mjs onboard \
+  --non-interactive \
+  --accept-risk \
+  --mode local \
+  --flow manual \
+  --auth-choice skip \
+  --gateway-port 18789 \
+  --gateway-bind lan \
+  --gateway-auth token \
+  --gateway-token $OPENCLAW_GATEWAY_TOKEN \
+  --skip-channels \
+  --skip-skills \
+  --skip-daemon \
+  --skip-health
+
+# 2. Authenticate GitHub Copilot (interactive — opens device flow)
+node openclaw.mjs models auth login-github-copilot
 ```
 
-Note this value — you'll paste it into the wizard so the config token matches the env var.
+The Copilot auth command shows a URL and code. Open `https://github.com/login/device` in your browser, enter the code, and authorize. Then continue:
 
-#### 3b: Run the onboarding wizard
+```sh
+# 3. Set model
+node openclaw.mjs models set github-copilot/claude-opus-4.6
+
+# 4. Enable Control UI token access
+node openclaw.mjs config set gateway.controlUi.allowInsecureAuth true
+
+# 5. Exit
+exit
+```
+
+> **Gotcha**: Model IDs use dots not hyphens: `claude-opus-4.6` works, `claude-opus-4-6` gives "Unknown model".
+
+Restart the container to apply `allowInsecureAuth`:
+
+```powershell
+$rev = az containerapp show --name ca-openclaw --resource-group rg-openclaw `
+  --query "properties.latestRevisionName" -o tsv
+az containerapp revision restart --revision $rev --resource-group rg-openclaw
+```
+
+Wait ~30 seconds for the restart.
+
+<details>
+<summary>Alternative: interactive wizard (if you prefer manual control)</summary>
 
 ```sh
 node openclaw.mjs onboard
 ```
-
-Choose **Manual** when asked for onboarding mode. Key choices:
 
 | Prompt | Choose | Why |
 |--------|--------|-----|
 | Security warning | **Yes** | |
 | Onboarding mode | **Manual** | NOT QuickStart — QuickStart defaults to loopback, which breaks ACA |
 | Gateway location | **Local gateway** | Running inside the container |
-| Workspace directory | **Enter** (default) | `/home/node/.openclaw/workspace` |
+| Workspace directory | **Enter** (default) | |
 | Gateway port | **Enter** (18789) | |
 | Gateway bind | **LAN (0.0.0.0)** | **CRITICAL** — ACA ingress requires non-loopback bind |
 | Gateway auth | **Token** | |
-| Tailscale | **Off** | ACA handles ingress |
-| Gateway token | **Paste the token from Step 3a** | Reuse the existing env var token |
-| Channels | **No** | Using Control UI; add channels later |
+| Tailscale | **Off** | |
+| Gateway token | **Paste `$OPENCLAW_GATEWAY_TOKEN`** | Must match the env var from deploy script |
+| Channels | **No** | |
 | Skills | **Yes** → **Skip** dependencies | |
 | Hooks | **Skip for now** | |
 | How to hatch | **Do this later** | No model configured yet |
 
-> **Why paste the existing token?** The `OPENCLAW_GATEWAY_TOKEN` env var is already set by the deploy script. If the wizard auto-generates a different token, they won't match.
+Then run the Copilot auth and remaining commands as above.
 
-> **Why "Do this later"?** No model provider is configured yet (GitHub Copilot auth is the next step), so the hatch would fail.
-
-#### 3c: Authenticate GitHub Copilot and set model
-
-Still in the exec shell ([GitHub Copilot provider docs](https://docs.openclaw.ai/providers/github-copilot)):
-
-```sh
-node openclaw.mjs models auth login-github-copilot
-```
-
-Visit the URL shown, enter the one-time code, authorize in your browser. Then:
-
-```sh
-node openclaw.mjs models set github-copilot/claude-opus-4.6
-```
-
-> **Gotcha**: Model IDs use dots not hyphens: `claude-opus-4.6` works, `claude-opus-4-6` gives "Unknown model".
-
-#### 3d: Enable Control UI access
-
-```sh
-node openclaw.mjs config set gateway.controlUi.allowInsecureAuth true
-```
-
-This allows token-only authentication without device pairing. This is what the [upstream Docker guide](https://docs.openclaw.ai/install/docker#control-ui-token--pairing-docker) recommends for containerized deployments.
-
-> **Why?** ACA ingress connections appear as non-localhost to the gateway. Without this setting, every new browser requires explicit approval via exec shell.
-
-#### 3e: Exit and restart
-
-```sh
-exit
-```
-
-Restart to apply the `allowInsecureAuth` setting:
-
-```powershell
-# Get revision name
-$rev = az containerapp show --name ca-openclaw --resource-group rg-openclaw `
-  --query "properties.latestRevisionName" -o tsv
-
-# Restart
-az containerapp revision restart --revision $rev --resource-group rg-openclaw
-```
-
-Wait ~30 seconds for the container to restart.
+</details>
 
 ### Step 4: Access the Control UI and verify
 
