@@ -4,9 +4,11 @@
 # Prerequisites: infrastructure deployed via main.bicep (placeholder container running)
 # What this does:
 #   1. Auto-discovers ACR and App names from the Bicep deployment outputs
-#   2. Builds OpenClaw image from source and pushes to ACR
-#   3. Generates a gateway auth token
-#   4. Updates the Container App with OpenClaw image, NFS mount, and full config
+#   2. Clones OpenClaw source (if not already present)
+#   3. Builds OpenClaw image from source and pushes to ACR
+#   4. Generates a gateway auth token
+#   5. Updates the Container App with OpenClaw image, NFS mount, and full config
+#   6. Configures gateway non-interactively (onboard, model, Control UI)
 #
 # Usage (no names needed — auto-discovered from Bicep outputs):
 #   .\bicep\deploy-openclaw.ps1 -ResourceGroup rg-openclaw
@@ -34,7 +36,16 @@ if (-not $AcrName -or -not $AppName) {
 Write-Host "  ACR:  $AcrName" -ForegroundColor Green
 Write-Host "  App:  $AppName" -ForegroundColor Green
 
-Write-Host "`n=== Step 1/3: Building OpenClaw image in ACR ===" -ForegroundColor Cyan
+Write-Host "`n=== Step 1/5: Cloning OpenClaw source ===" -ForegroundColor Cyan
+
+if (Test-Path $SourcePath) {
+    Write-Host "  $SourcePath already exists, skipping clone"
+} else {
+    git clone https://github.com/openclaw/openclaw.git $SourcePath
+    if ($LASTEXITCODE -ne 0) { throw "Git clone failed" }
+}
+
+Write-Host "`n=== Step 2/5: Building OpenClaw image in ACR ===" -ForegroundColor Cyan
 Write-Host "This uploads source to Azure and builds remotely (~6 min)..."
 
 # Fix Unicode crash: az acr build streams pnpm progress output with Unicode
@@ -50,14 +61,14 @@ az acr build `
 if ($LASTEXITCODE -ne 0) { throw "Image build failed" }
 Write-Host "Image built and pushed to $AcrName.azurecr.io/openclaw:latest" -ForegroundColor Green
 
-Write-Host "`n=== Step 2/3: Generating gateway token ===" -ForegroundColor Cyan
+Write-Host "`n=== Step 3/6: Generating gateway token ===" -ForegroundColor Cyan
 $bytes = New-Object byte[] 32
 [System.Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
 $GatewayToken = [BitConverter]::ToString($bytes).Replace('-', '').ToLower()
 Write-Host "Token generated (save this for Control UI access):"
 Write-Host "  $GatewayToken" -ForegroundColor Yellow
 
-Write-Host "`n=== Step 3/3: Updating Container App with OpenClaw ===" -ForegroundColor Cyan
+Write-Host "`n=== Step 4/6: Updating Container App with OpenClaw ===" -ForegroundColor Cyan
 
 $AcrServer = "$AcrName.azurecr.io"
 $AcrCreds = az acr credential show --name $AcrName 2>$null | ConvertFrom-Json
@@ -148,7 +159,7 @@ Remove-Item $yamlPath -ErrorAction SilentlyContinue
 Write-Host "`nWaiting for container to start..."
 Start-Sleep -Seconds 15
 
-Write-Host "`n=== Step 4/5: Configuring OpenClaw (non-interactive) ===" -ForegroundColor Cyan
+Write-Host "`n=== Step 5/6: Configuring OpenClaw (non-interactive) ===" -ForegroundColor Cyan
 
 # Configure gateway — pass token as literal value (env var won't expand via --command)
 az containerapp exec --name $AppName --resource-group $ResourceGroup `
@@ -162,7 +173,7 @@ az containerapp exec --name $AppName --resource-group $ResourceGroup `
 az containerapp exec --name $AppName --resource-group $ResourceGroup `
     --command "node openclaw.mjs config set gateway.controlUi.allowInsecureAuth true"
 
-Write-Host "`n=== Step 5/5: Gateway configured ===" -ForegroundColor Green
+Write-Host "`n=== Step 6/6: Gateway configured ===" -ForegroundColor Green
 $fqdn = az containerapp show --name $AppName --resource-group $ResourceGroup `
     --query "properties.configuration.ingress.fqdn" -o tsv 2>$null
 $rev = az containerapp show --name $AppName --resource-group $ResourceGroup `

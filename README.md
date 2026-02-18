@@ -29,18 +29,15 @@ Deploy [OpenClaw](https://github.com/openclaw/openclaw) on Azure Container Apps 
 
 ## Quick Deploy
 
-Three phases, ~20 minutes total. Run from the repo root in a standalone terminal (Windows Terminal — the wizard needs arrow keys).
+Three phases, ~20 minutes total.
 
 ```powershell
-# 0. Clone OpenClaw source (needed for image build)
-git clone https://github.com/openclaw/openclaw.git upstream/repo
-
 # 1. Infrastructure (~5 min) — names are auto-generated, nothing to configure
 az group create --name rg-openclaw --location swedencentral
 az deployment group create --resource-group rg-openclaw `
   --template-file bicep/main.bicep --parameters bicep/main.bicepparam
 
-# 2. Build + deploy + configure (~10 min) — save the token from output
+# 2. Build + deploy + configure (~10 min) — clones source, builds image, configures gateway
 .\bicep\deploy-openclaw.ps1 -ResourceGroup rg-openclaw
 
 # 3. GitHub Copilot auth (only interactive step)
@@ -49,7 +46,7 @@ az containerapp exec --name ca-openclaw --resource-group rg-openclaw
 #   exit
 ```
 
-See [docs/deployment-guide.md](docs/deployment-guide.md) for the complete walkthrough with every parameter explained.
+Open the Control UI URL from the script output. Send a test message.
 
 ## What's in this repo
 
