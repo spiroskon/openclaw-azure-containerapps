@@ -52,6 +52,10 @@ If any show `NotRegistered`: `az provider register --namespace <name>`.
 ## Quick Deploy
 
 ```powershell
+# 0. Clone this repo
+git clone https://github.com/spiroskon/openclaw-azure-containerapps.git
+cd openclaw-azure-containerapps
+
 # 1. Infrastructure (~5 min) — names are auto-generated, nothing to configure
 az group create --name rg-openclaw --location swedencentral
 az deployment group create --resource-group rg-openclaw `
