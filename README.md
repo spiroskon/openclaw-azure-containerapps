@@ -2,26 +2,6 @@
 
 Deploy [OpenClaw](https://github.com/openclaw/openclaw) on Azure Container Apps — containerized, with GitHub Copilot as the LLM provider.
 
-## Prerequisites
-
-- Azure CLI 2.80+ (`az version`)
-- Active Azure subscription (`az account show`)
-- Git
-
-Docker Desktop is **not required** — images are built remotely via `az acr build`.
-
-Before deploying, verify resource providers are registered:
-
-```powershell
-az provider show --namespace Microsoft.App --query "registrationState" -o tsv
-az provider show --namespace Microsoft.ContainerRegistry --query "registrationState" -o tsv
-az provider show --namespace Microsoft.Storage --query "registrationState" -o tsv
-az provider show --namespace Microsoft.OperationalInsights --query "registrationState" -o tsv
-az provider show --namespace Microsoft.ManagedIdentity --query "registrationState" -o tsv
-```
-
-If any show `NotRegistered`, register them: `az provider register --namespace <name>`.
-
 ## Architecture
 
 ```
@@ -47,11 +27,9 @@ If any show `NotRegistered`, register them: `az provider register --namespace <n
 └─────────────────────────────────────────────────────────────────┘
 ```
 
----
-
 ## Quick Deploy
 
-Three phases, ~20 minutes total.
+Three phases, ~20 minutes total. Run from the repo root in a standalone terminal (Windows Terminal — the wizard needs arrow keys).
 
 ```powershell
 # 0. Clone OpenClaw source (needed for image build)
@@ -71,219 +49,52 @@ az containerapp exec --name ca-openclaw --resource-group rg-openclaw
 #   exit
 ```
 
-Open the Control UI URL from the script output. Send a test message — the assistant should respond via GitHub Copilot's Claude Opus 4.6.
+See [docs/deployment-guide.md](docs/deployment-guide.md) for the complete walkthrough with every parameter explained.
 
-### What Bicep creates
+## What's in this repo
 
-| Resource | Type |
-|----------|------|
-| VNet + 2 subnets | `Microsoft.Network/virtualNetworks` |
-| Premium FileStorage + NFS share | `Microsoft.Storage/storageAccounts` |
-| Private endpoint + DNS | `Microsoft.Network/privateEndpoints` |
-| Azure Container Registry | `Microsoft.ContainerRegistry/registries` |
-| Log Analytics Workspace | `Microsoft.OperationalInsights/workspaces` |
-| ACA Environment + NFS storage | `Microsoft.App/managedEnvironments` |
-| Container App (placeholder) | `Microsoft.App/containerApps` |
+| Path | Description |
+|------|-------------|
+| [`bicep/`](bicep/) | Bicep template + deploy script — all infrastructure as code |
+| [`docs/deployment-guide.md`](docs/deployment-guide.md) | Full deployment guide with manual CLI reference |
+| [`docs/deployment-options-adr.md`](docs/deployment-options-adr.md) | ADR: why Azure Container Apps |
+| [`docs/journey.md`](docs/journey.md) | How we built this — the narrative arc |
 
-### What the deploy script does
+## The Story
 
-1. Auto-discovers ACR and App names from Bicep outputs
-2. Builds the OpenClaw image from source and pushes to ACR (~6 min)
-3. Generates a secure gateway token
-4. Updates the Container App with full config (image, NFS mount, startup command)
-5. Runs non-interactive onboard, sets model, enables Control UI access
-6. Outputs the Control UI URL with the token
+Every artifact in this repository — the Bicep templates, the deployment guide, the architecture decisions, this README — was created collaboratively between a human engineer and GitHub Copilot in VS Code.
 
----
+The methodology: manual CLI deployment first (discover the gotchas), document everything in parallel, codify into Bicep (proven, not imagined), then verify with a clean from-scratch deployment. Nine sessions over four days, from zero to a fully deployed, reproducible Azure infrastructure.
 
-## Post-Deploy: Security Audit
+Read the full narrative in [docs/journey.md](docs/journey.md).
 
-```powershell
-az containerapp exec --name ca-openclaw --resource-group rg-openclaw `
-  --command "node openclaw.mjs security audit"
-```
+## Prerequisites
 
-| Finding | Severity | Verdict |
-|---------|----------|---------|
-| `allowInsecureAuth` enabled | CRITICAL | **By design** — ACA terminates TLS; internal hop is inside the managed environment |
-| State dir world-writable (777) | CRITICAL | **Cosmetic** — NFS mount root is 777; files inside are owned by `node` with correct permissions |
-| No auth rate limiting | WARN | **Accepted** — 256-bit token; brute force infeasible |
+- Azure CLI 2.80+
+- Active Azure subscription
+- Git
 
----
+Docker Desktop is **not required** — images are built remotely via `az acr build`.
 
 ## Key Design Decisions
 
 - **Azure Container Apps** over ACI/VM — managed ingress, auto-TLS, consumption pricing
 - **NFS over SMB** — NFS authenticates via network rules (private endpoint), bypassing `allowSharedKeyAccess: false` tenant policies
 - **Two-phase deploy** — Bicep (infrastructure + placeholder) then script (image build + app update)
+- **Manual CLI first, then Bicep** — discover gotchas before codifying
 - **GitHub Copilot as LLM provider** — built-in provider with device flow auth, no API keys needed
-
----
-
-## Manual CLI Reference
-
-<details>
-<summary>Deploy without Bicep — every Azure resource created individually (8 steps)</summary>
-
-These steps document how each resource was originally configured during manual deployment. Every gotcha is already handled in the Bicep template.
-
-### Step 1: Create Resource Group
-
-```powershell
-az group create --name rg-openclaw --location swedencentral
-```
-
-### Step 2: Create Azure Container Registry
-
-```powershell
-az acr create --name <your-acr-name> --resource-group rg-openclaw `
-  --sku Basic --admin-enabled true --location swedencentral
-```
-
-**Gotcha**: ACR names must be globally unique. Check with `az acr check-name --name <name>`.
-
-### Step 3: Build and push image
-
-```powershell
-az acr build --registry <your-acr-name> --image openclaw:latest `
-  --file upstream/repo/Dockerfile upstream/repo/
-```
-
-### Step 4: Create networking + NFS storage
-
-> **Why NFS?** Some tenants enforce `allowSharedKeyAccess: false`. NFS authenticates via network rules (private endpoint), bypassing the restriction.
-
-```powershell
-# VNet
-az network vnet create --resource-group rg-openclaw --name vnet-openclaw `
-  --location swedencentral --address-prefix 10.1.0.0/26
-
-# ACA subnet
-az network vnet subnet create --resource-group rg-openclaw --vnet-name vnet-openclaw `
-  --name snet-aca --address-prefixes 10.1.0.0/27 `
-  --delegations Microsoft.App/environments --service-endpoints Microsoft.Storage
-
-# PE subnet
-az network vnet subnet create --resource-group rg-openclaw --vnet-name vnet-openclaw `
-  --name snet-pe --address-prefixes 10.1.0.32/28
-
-# Premium FileStorage + NFS share
-az storage account create --name <your-storage-name> --resource-group rg-openclaw `
-  --location swedencentral --sku Premium_LRS --kind FileStorage `
-  --enable-large-file-share --https-only false
-
-az storage share-rm create --storage-account <your-storage-name> `
-  --resource-group rg-openclaw --name openclaw-state --quota 100 --enabled-protocols NFS
-
-# Private endpoint + DNS
-$storageId = (az storage account show --name <your-storage-name> `
-  --resource-group rg-openclaw --query "id" -o tsv)
-
-az network private-endpoint create --resource-group rg-openclaw --name pep-storage `
-  --vnet-name vnet-openclaw --subnet snet-pe `
-  --private-connection-resource-id $storageId --group-id file `
-  --connection-name connection-storage --location swedencentral
-
-az network private-dns zone create --resource-group rg-openclaw `
-  --name "privatelink.file.core.windows.net"
-
-az network private-dns link vnet create --resource-group rg-openclaw `
-  --zone-name "privatelink.file.core.windows.net" --name link-vnet `
-  --virtual-network vnet-openclaw --registration-enabled false
-
-az network private-endpoint dns-zone-group create --resource-group rg-openclaw `
-  --endpoint-name pep-storage --name dnsgroup-storage `
-  --private-dns-zone "privatelink.file.core.windows.net" --zone-name file
-```
-
-### Step 5: Create Log Analytics Workspace
-
-```powershell
-az monitor log-analytics workspace create --resource-group rg-openclaw `
-  --workspace-name law-openclaw --location swedencentral
-```
-
-### Step 6: Create Container Apps Environment + NFS storage
-
-```powershell
-$SUBNET_ID = (az network vnet subnet show --resource-group rg-openclaw `
-  --vnet-name vnet-openclaw --name snet-aca --query "id" -o tsv)
-$LAW_ID = (az monitor log-analytics workspace show --resource-group rg-openclaw `
-  --workspace-name law-openclaw --query "customerId" -o tsv)
-$LAW_KEY = (az monitor log-analytics workspace get-shared-keys --resource-group rg-openclaw `
-  --workspace-name law-openclaw --query "primarySharedKey" -o tsv)
-
-az containerapp env create --name cae-openclaw --resource-group rg-openclaw `
-  --location swedencentral --infrastructure-subnet-resource-id $SUBNET_ID `
-  --logs-workspace-id $LAW_ID --logs-workspace-key $LAW_KEY
-
-# Link NFS storage
-az extension add -n containerapp --upgrade
-$STORAGE_KEY = (az storage account keys list --account-name <your-storage-name> `
-  --resource-group rg-openclaw --query "[0].value" -o tsv)
-
-az containerapp env storage set --name cae-openclaw --resource-group rg-openclaw `
-  --storage-name openclawstorage --storage-type NfsAzureFile `
-  --server <your-storage-name>.file.core.windows.net `
-  --azure-file-share-name /<your-storage-name>/openclaw-state `
-  --azure-file-account-name <your-storage-name> --azure-file-account-key $STORAGE_KEY `
-  --access-mode ReadWrite
-```
-
-### Step 7: Create Container App
-
-```powershell
-$bytes = New-Object byte[] 32
-[System.Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
-$GATEWAY_TOKEN = [BitConverter]::ToString($bytes).Replace('-','').ToLower()
-
-$ACR_USERNAME = (az acr credential show --name <your-acr-name> --query "username" -o tsv)
-$ACR_PASSWORD = (az acr credential show --name <your-acr-name> --query "passwords[0].value" -o tsv)
-
-az containerapp create --name ca-openclaw --resource-group rg-openclaw `
-  --environment cae-openclaw --image <your-acr-name>.azurecr.io/openclaw:latest `
-  --registry-server <your-acr-name>.azurecr.io `
-  --registry-username $ACR_USERNAME --registry-password $ACR_PASSWORD `
-  --target-port 18789 --ingress external --min-replicas 1 --max-replicas 1 `
-  --cpu 2.0 --memory 4Gi `
-  --env-vars "OPENCLAW_GATEWAY_TOKEN=$GATEWAY_TOKEN" "NODE_ENV=production" "HOME=/home/node" "TERM=xterm-256color"
-```
-
-Then add NFS volume mount via YAML update (see deploy script for exact structure).
-
-### Step 8: Configure OpenClaw
-
-```powershell
-az containerapp exec --name ca-openclaw --resource-group rg-openclaw
-```
-
-Inside the container:
-
-```sh
-node openclaw.mjs onboard --non-interactive --accept-risk --mode local --flow manual \
-  --auth-choice skip --gateway-port 18789 --gateway-bind lan --gateway-auth token \
-  --gateway-token $OPENCLAW_GATEWAY_TOKEN --skip-channels --skip-skills --skip-daemon --skip-health
-node openclaw.mjs models set github-copilot/claude-opus-4.6
-node openclaw.mjs config set gateway.controlUi.allowInsecureAuth true
-node openclaw.mjs models auth login-github-copilot
-exit
-```
-
-</details>
-
----
-
-## Cleanup
-
-```powershell
-az group delete --name rg-openclaw --yes --no-wait
-```
 
 ## Related
 
 - [OpenClaw Secure Docker Setup](https://github.com/spiroskon/openclaw-secure-docker) — run OpenClaw locally on Windows with Docker
 - [OpenClaw Official Docs](https://docs.openclaw.ai)
 - [OpenClaw GitHub](https://github.com/openclaw/openclaw)
+
+## Cleanup
+
+```powershell
+az group delete --name rg-openclaw --yes --no-wait
+```
 
 ## License
 
