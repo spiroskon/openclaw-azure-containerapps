@@ -150,49 +150,45 @@ The script auto-discovers the ACR and App names from the Bicep deployment output
 
 ### Step 3: Configure OpenClaw
 
-Connect to the running container and configure the gateway, then authenticate GitHub Copilot.
+Three configuration commands run non-interactively from your local terminal. Only Copilot auth (Step 4) requires an interactive session.
+
+```powershell
+# 3a. Configure gateway (non-interactive)
+az containerapp exec --name ca-openclaw --resource-group rg-openclaw `
+  --command "node openclaw.mjs onboard --non-interactive --accept-risk --mode local --flow manual --auth-choice skip --gateway-port 18789 --gateway-bind lan --gateway-auth token --skip-channels --skip-skills --skip-daemon --skip-health"
+
+# 3b. Set default model
+az containerapp exec --name ca-openclaw --resource-group rg-openclaw `
+  --command "node openclaw.mjs models set github-copilot/claude-opus-4.6"
+
+# 3c. Enable Control UI token access
+az containerapp exec --name ca-openclaw --resource-group rg-openclaw `
+  --command "node openclaw.mjs config set gateway.controlUi.allowInsecureAuth true"
+```
+
+> **Gotcha**: Model IDs use dots not hyphens: `claude-opus-4.6` works, `claude-opus-4-6` gives "Unknown model".
+
+### Step 4: Authenticate GitHub Copilot
+
+This is the only interactive step — the device flow requires a browser.
 
 ```powershell
 az containerapp exec --name ca-openclaw --resource-group rg-openclaw
 ```
 
-Inside the container shell, run these commands in order:
+Inside the container shell:
 
 ```sh
-# 1. Configure gateway (non-interactive — uses the token already set by deploy script)
-node openclaw.mjs onboard \
-  --non-interactive \
-  --accept-risk \
-  --mode local \
-  --flow manual \
-  --auth-choice skip \
-  --gateway-port 18789 \
-  --gateway-bind lan \
-  --gateway-auth token \
-  --gateway-token $OPENCLAW_GATEWAY_TOKEN \
-  --skip-channels \
-  --skip-skills \
-  --skip-daemon \
-  --skip-health
-
-# 2. Authenticate GitHub Copilot (interactive — opens device flow)
 node openclaw.mjs models auth login-github-copilot
 ```
 
-The Copilot auth command shows a URL and code. Open `https://github.com/login/device` in your browser, enter the code, and authorize. Then continue:
+1. The terminal shows a URL and a one-time code
+2. Open `https://github.com/login/device` in your browser
+3. Enter the code and authorize the application
+4. Return to the terminal — it completes automatically
+5. Type `exit`
 
-```sh
-# 3. Set model
-node openclaw.mjs models set github-copilot/claude-opus-4.6
-
-# 4. Enable Control UI token access
-node openclaw.mjs config set gateway.controlUi.allowInsecureAuth true
-
-# 5. Exit
-exit
-```
-
-> **Gotcha**: Model IDs use dots not hyphens: `claude-opus-4.6` works, `claude-opus-4-6` gives "Unknown model".
+> **Important:** Keep the terminal open until authorization completes.
 
 Restart the container to apply `allowInsecureAuth`:
 
@@ -231,7 +227,7 @@ Then run the Copilot auth and remaining commands as above.
 
 </details>
 
-### Step 4: Access the Control UI and verify
+### Step 5: Access the Control UI and verify
 
 Open in your browser:
 
@@ -506,7 +502,7 @@ Remove-Item app.yaml
 
 ### Step 8: Configure OpenClaw
 
-Follow [Step 3 from the Bicep section](#step-3-configure-openclaw-interactive) — the interactive configuration steps are the same whether you deployed via Bicep or manual CLI.
+Follow [Steps 3-4 from the Bicep section](#step-3-configure-openclaw) — the configuration steps are the same whether you deployed via Bicep or manual CLI.
 
 ---
 
