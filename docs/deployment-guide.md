@@ -448,7 +448,33 @@ Remove-Item app.yaml
 
 ### Step 8: Configure OpenClaw
 
-Follow [Steps 3-4 from the Bicep section](#step-3-configure-openclaw) — the configuration steps are the same whether you deployed via Bicep or manual CLI.
+Connect to the container and run the configuration commands:
+
+```powershell
+az containerapp exec --name ca-openclaw --resource-group rg-openclaw
+```
+
+Inside the container shell, copy-paste this block:
+
+```sh
+# Get the token set by Step 7
+echo $OPENCLAW_GATEWAY_TOKEN
+
+# Non-interactive gateway config (uses the token from the env var)
+node openclaw.mjs onboard --non-interactive --accept-risk --mode local --flow manual --auth-choice skip --gateway-port 18789 --gateway-bind lan --gateway-auth token --gateway-token $OPENCLAW_GATEWAY_TOKEN --skip-channels --skip-skills --skip-daemon --skip-health
+
+# Set model and enable Control UI
+node openclaw.mjs models set github-copilot/claude-opus-4.6
+node openclaw.mjs config set gateway.controlUi.allowInsecureAuth true
+
+# Copilot auth (interactive — opens device flow)
+node openclaw.mjs models auth login-github-copilot
+
+# Exit when done
+exit
+```
+
+Open the Control UI at `https://<your-fqdn>/#token=<your-token>` and send a test message.
 
 ---
 
