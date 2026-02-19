@@ -169,7 +169,7 @@ az containerapp exec --name $AppName --resource-group $ResourceGroup `
 az containerapp exec --name $AppName --resource-group $ResourceGroup `
     --command "node openclaw.mjs models set github-copilot/claude-opus-4.6"
 
-# Enable Control UI token access
+# Enable Control UI token access (initial setup — see README for device pairing hardening)
 az containerapp exec --name $AppName --resource-group $ResourceGroup `
     --command "node openclaw.mjs config set gateway.controlUi.allowInsecureAuth true"
 

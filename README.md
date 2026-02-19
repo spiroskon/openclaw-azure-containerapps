@@ -139,9 +139,53 @@ az containerapp exec --name ca-openclaw --resource-group rg-openclaw `
 
 | Finding | Severity | Verdict |
 |---------|----------|---------|
-| `allowInsecureAuth` enabled | CRITICAL | **By design** — ACA terminates TLS; internal hop is inside the managed environment |
+| `allowInsecureAuth` enabled | CRITICAL | **Temporary** — needed for initial setup; removable via [device pairing](#optional-enable-device-pairing) |
 | State dir world-writable (777) | CRITICAL | **Cosmetic** — NFS mount root is 777; files inside are owned by `node` with correct permissions |
 | No auth rate limiting | WARN | **Accepted** — 256-bit token; brute force infeasible |
+
+If you complete the [device pairing](#optional-enable-device-pairing) step below, the `allowInsecureAuth` finding goes away.
+
+---
+
+## Optional: Enable Device Pairing
+
+After verifying everything works, you can disable `allowInsecureAuth` and use proper device pairing. This removes the critical audit finding and enables cryptographic device identity for the Control UI.
+
+The trick: `az containerapp exec` runs inside the container, but the CLI connects via the LAN IP by default. Use `--url ws://127.0.0.1:18789 --token <TOKEN>` to connect via loopback, which the gateway treats as local.
+
+```powershell
+# 1. Get your gateway token (from deploy script output, or):
+az containerapp exec --name ca-openclaw --resource-group rg-openclaw `
+  --command "printenv OPENCLAW_GATEWAY_TOKEN"
+
+# 2. Disable insecure auth
+az containerapp exec --name ca-openclaw --resource-group rg-openclaw `
+  --command "node openclaw.mjs config set gateway.controlUi.allowInsecureAuth false"
+
+# 3. Restart the container
+$rev = az containerapp show --name ca-openclaw --resource-group rg-openclaw `
+  --query "properties.latestRevisionName" -o tsv
+az containerapp revision restart --revision $rev --resource-group rg-openclaw
+
+# 4. Open/refresh browser — you'll see "pairing required"
+#    This creates a pending device request
+
+# 5. Approve the browser device (via loopback inside the container)
+az containerapp exec --name ca-openclaw --resource-group rg-openclaw `
+  --command "node openclaw.mjs devices approve --latest --url ws://127.0.0.1:18789 --token <TOKEN>"
+
+# 6. Refresh browser — should connect. Device is now paired.
+```
+
+**If something goes wrong**, re-enable insecure auth:
+
+```powershell
+az containerapp exec --name ca-openclaw --resource-group rg-openclaw `
+  --command "node openclaw.mjs config set gateway.controlUi.allowInsecureAuth true"
+# Restart revision as in step 3
+```
+
+> **Note:** Clearing browser data or switching browsers requires re-pairing (repeat steps 4-5).
 
 ---
 
