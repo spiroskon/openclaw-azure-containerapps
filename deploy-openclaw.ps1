@@ -11,12 +11,12 @@
 #   6. Configures gateway non-interactively (onboard, model, Control UI)
 #
 # Usage (no names needed — auto-discovered from Bicep outputs):
-#   .\bicep\deploy-openclaw.ps1 -ResourceGroup rg-openclaw
+#   .\deploy-openclaw.ps1 -ResourceGroup rg-openclaw
 # ---------------------------------------------------------------------------
 
 param(
     [Parameter(Mandatory)] [string] $ResourceGroup,
-    [string] $SourcePath = "upstream/repo",
+    [string] $SourcePath = "openclaw-repo",
     [string] $Cpu = "2.0",
     [string] $Memory = "4Gi"
 )
@@ -36,7 +36,7 @@ if (-not $AcrName -or -not $AppName) {
 Write-Host "  ACR:  $AcrName" -ForegroundColor Green
 Write-Host "  App:  $AppName" -ForegroundColor Green
 
-Write-Host "`n=== Step 1/5: Cloning OpenClaw source ===" -ForegroundColor Cyan
+Write-Host "`n=== Step 1/6: Cloning OpenClaw source ===" -ForegroundColor Cyan
 
 if (Test-Path $SourcePath) {
     Write-Host "  $SourcePath already exists, skipping clone"
@@ -45,7 +45,7 @@ if (Test-Path $SourcePath) {
     if ($LASTEXITCODE -ne 0) { throw "Git clone failed" }
 }
 
-Write-Host "`n=== Step 2/5: Building OpenClaw image in ACR ===" -ForegroundColor Cyan
+Write-Host "`n=== Step 2/6: Building OpenClaw image in ACR ===" -ForegroundColor Cyan
 Write-Host "This uploads source to Azure and builds remotely (~6 min)..."
 
 # Fix Unicode crash: az acr build streams pnpm progress output with Unicode

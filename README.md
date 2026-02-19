@@ -2,6 +2,8 @@
 
 Deploy [OpenClaw](https://github.com/openclaw/openclaw) on Azure Container Apps — containerized, with GitHub Copilot as the LLM provider.
 
+OpenClaw is an open-source AI agent that runs 24/7 — it can browse the web, execute tasks, manage files, and communicate through multiple channels. This guide deploys it on Azure with managed HTTPS, NFS-backed persistent storage, and no Docker Desktop required on your machine.
+
 ## Prerequisites
 
 - Azure CLI 2.80+ (`az version`)
@@ -278,6 +280,16 @@ az group delete --name rg-openclaw --yes --no-wait
 - [OpenClaw Secure Docker Setup](https://github.com/spiroskon/openclaw-secure-docker) — run OpenClaw locally on Windows with Docker
 - [OpenClaw Official Docs](https://docs.openclaw.ai)
 - [OpenClaw GitHub](https://github.com/openclaw/openclaw)
+
+## Tested With
+
+| Component | Version |
+|-----------|--------|
+| OpenClaw | Latest from `main` branch (Feb 2026) |
+| Azure CLI | 2.80+ |
+| Bicep | Built-in with Azure CLI |
+| Region | Sweden Central |
+| LLM | `github-copilot/claude-opus-4.6` |
 
 ## License
 
