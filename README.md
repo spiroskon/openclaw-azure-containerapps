@@ -4,6 +4,28 @@ Deploy [OpenClaw](https://github.com/openclaw/openclaw) on Azure Container Apps 
 
 OpenClaw is an open-source AI agent that runs 24/7 — it can browse the web, execute tasks, manage files, and communicate through multiple channels. This guide deploys it on Azure with managed HTTPS, NFS-backed persistent storage, and no Docker Desktop required on your machine.
 
+## Who This Guide Is For
+
+- Engineers deploying OpenClaw to Azure for the first time
+- Teams that want a reproducible Bicep-based deployment path
+- Practitioners who prefer GitHub Copilot auth over API key management
+
+## Time to Complete
+
+- Infrastructure deployment: **~5 minutes**
+- Build + app configuration: **~10 minutes**
+- Interactive Copilot auth + smoke test: **~5 minutes**
+- Total: **~20 minutes**
+
+## What Success Looks Like
+
+By the end of this guide, you should have:
+
+- A running Azure Container Apps environment with HTTPS ingress
+- OpenClaw configured with persistent NFS-backed state
+- GitHub Copilot authenticated as the LLM provider
+- A working Control UI URL with token access
+
 ## Prerequisites
 
 - Azure CLI 2.80+ (`az version`)
@@ -73,6 +95,17 @@ az containerapp exec --name ca-openclaw --resource-group rg-openclaw
 ```
 
 Open the Control UI URL from the script output. Send a test message.
+
+### Quick verification
+
+```powershell
+az containerapp show --name ca-openclaw --resource-group rg-openclaw `
+  --query "{fqdn:properties.configuration.ingress.fqdn,revision:properties.latestRevisionName}" -o table
+
+az containerapp logs show --name ca-openclaw --resource-group rg-openclaw --tail 20 --type console
+```
+
+You should see a valid FQDN, an active latest revision, and gateway startup logs without crash loops.
 
 ### What Bicep creates
 
