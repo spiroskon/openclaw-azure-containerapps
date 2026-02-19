@@ -176,8 +176,6 @@ az containerapp exec --name $AppName --resource-group $ResourceGroup `
 Write-Host "`n=== Step 6/6: Gateway configured ===" -ForegroundColor Green
 $fqdn = az containerapp show --name $AppName --resource-group $ResourceGroup `
     --query "properties.configuration.ingress.fqdn" -o tsv 2>$null
-$rev = az containerapp show --name $AppName --resource-group $ResourceGroup `
-    --query "properties.latestRevisionName" -o tsv 2>$null
 Write-Host ""
 Write-Host "  ┌─────────────────────────────────────────────────────────────────┐" -ForegroundColor Yellow
 Write-Host "  │  GATEWAY TOKEN:                                                │" -ForegroundColor Yellow
