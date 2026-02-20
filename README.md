@@ -216,9 +216,9 @@ Clearing browser data or switching browsers requires re-pairing.
 ---
 
 <details>
-<summary><strong>Manual CLI reference</strong> (deploy each resource individually)</summary>
+<summary><strong>Step-by-step CLI deployment</strong> (without Bicep or deploy script)</summary>
 
-These commands show how each Azure resource was originally configured. Every gotcha is already handled in the Bicep template.
+The same deployment done with individual `az` commands. Useful if you want to see exactly what each resource does, customize specific parts, or debug a failing step.
 
 ### Step 1: Resource group
 
