@@ -4,11 +4,11 @@
   <img src="images/openclaw-azure.jpg" alt="OpenClaw on Azure Container Apps" width="800">
 </p>
 
-Deploy [OpenClaw](https://github.com/openclaw/openclaw) on Azure Container Apps with GitHub Copilot as the LLM provider. No API keys to manage, no Docker Desktop required.
+Deploy [OpenClaw](https://github.com/openclaw/openclaw) on Azure Container Apps with GitHub Copilot as the LLM provider.
 
 ## What is OpenClaw
 
-[OpenClaw](https://openclaw.ai/) is an open-source, self-hosted personal AI assistant. You run a single Gateway process on your own machine or a server, and it connects your chat apps (WhatsApp, Telegram, Discord, Slack, Signal, iMessage, and others) to AI agents. It is designed for developers and power users who want a personal assistant they can message from anywhere, without giving up control of their data.
+[OpenClaw](https://openclaw.ai/) is an open-source, self-hosted personal AI assistant. You run a single Gateway process on your own machine or a server, and it connects your chat apps (WhatsApp, Telegram, Discord, Slack, Signal, iMessage) to AI agents. Built for developers and power users who want a personal assistant they can message from anywhere without giving up control of their data.
 
 [![GitHub stars](https://img.shields.io/github/stars/openclaw/openclaw?style=social)](https://github.com/openclaw/openclaw) · [Docs](https://docs.openclaw.ai/) · [Source](https://github.com/openclaw/openclaw) · [DeepWiki](https://deepwiki.com/openclaw/openclaw)
 
@@ -23,8 +23,6 @@ The Bicep template creates the full Azure infrastructure (VNet, NFS storage with
 - Azure CLI 2.80+ (`az version`)
 - An active Azure subscription (`az account show`)
 - Git
-
-Docker Desktop is **not required**. Images are built remotely via `az acr build`.
 
 Verify resource providers are registered:
 
@@ -107,7 +105,7 @@ flowchart TB
     style copilot fill:#faf5ff,stroke:#7c3aed,stroke-width:2px
 ```
 
-This deployment configures `github-copilot/claude-opus-4.6` by default. GitHub Copilot provides access to models from Anthropic, OpenAI, Google, and xAI through a single subscription. Switch models after deployment with `node openclaw.mjs models set <model>`.
+This deployment uses `github-copilot/claude-opus-4.6`. GitHub Copilot provides access to models from Anthropic, OpenAI, Google, and xAI through a single subscription. Switch models after deployment with `node openclaw.mjs models set <model>`.
 
 <details>
 <summary>All available models (from <code>openclaw models list</code>)</summary>
@@ -139,7 +137,7 @@ This deployment configures `github-copilot/claude-opus-4.6` by default. GitHub C
 | Container Apps Environment + NFS storage | `Microsoft.App/managedEnvironments` |
 | Container App (placeholder) | `Microsoft.App/containerApps` |
 
-Globally unique names (ACR, storage) are auto-generated using `uniqueString()`. No manual naming required.
+Globally unique names (ACR, storage) are auto-generated using `uniqueString()`.
 
 ### What the deploy script does
 
@@ -207,13 +205,13 @@ Clearing browser data or switching browsers requires re-pairing.
 
 ## Design decisions
 
-**Azure Container Apps over ACI or VMs.** Managed HTTPS ingress, automatic TLS, consumption-based pricing, built-in VNet integration. No load balancer or reverse proxy to configure.
+**Azure Container Apps over ACI or VMs.** Managed HTTPS ingress, automatic TLS, consumption-based pricing, built-in VNet integration.
 
 **NFS over SMB for persistent storage.** NFS authenticates via network rules through the private endpoint, which avoids the `allowSharedKeyAccess: false` restriction enforced by some Azure tenants. SMB would fail silently in those environments.
 
-**Two-phase deployment.** Bicep deploys infrastructure with a placeholder container (Microsoft's ACA quickstart image). This proves networking, storage, and ingress work before the deploy script builds the real image and swaps it in. Debugging is simpler when infra and app concerns are separated.
+**Two-phase deployment.** Bicep deploys infrastructure with a placeholder container (Microsoft's ACA quickstart image) to verify networking, storage, and ingress before the deploy script builds the real image and swaps it in.
 
-**GitHub Copilot as LLM provider.** Device-flow OAuth with your existing GitHub account. No API keys to create, rotate, or store. The model (`claude-opus-4.6`) routes through the GitHub Copilot provider built into OpenClaw.
+**GitHub Copilot as LLM provider.** Device-flow OAuth with your existing GitHub account. OpenClaw has a built-in GitHub Copilot provider, so authentication is a one-time browser flow.
 
 ---
 
