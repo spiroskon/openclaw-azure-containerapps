@@ -84,18 +84,18 @@ flowchart TB
     ch -.-|configurable| gw
 
     subgraph azure["rg-openclaw"]
-        subgraph vnet["vnet-openclaw · 10.1.0.0/26"]
-            gw["ca-openclaw · OpenClaw Gateway<br/>snet-aca /27 · 2 vCPU · 4 GiB · Port 18789"]
-            pe["pep-storage · snet-pe /28"]
+        subgraph vnet["vnet-openclaw"]
+            gw["ca-openclaw<br/>OpenClaw Gateway<br/>2 vCPU · 4 GiB"]
+            pe["Private Endpoint · pep-storage"]
+            gw ---|NFS mount| pe
         end
-        gw ---|NFS mount| pe
-        pe --- nfs[("Premium NFS Storage<br/>openclaw-state")]
-        acr["Azure Container Registry"] ~~~ logs["Log Analytics"]
+        pe --- nfs[("NFS Storage · openclaw-state")]
+        acr["Container Registry"] ~~~ logs["Log Analytics"]
     end
 
     gw <-->|GitHub Copilot API| copilot
 
-    subgraph copilot["GitHub Copilot · One Subscription"]
+    subgraph copilot["GitHub Copilot"]
         opus["Claude Opus 4.6"]
         gpt["GPT-5.2"]
         gem["Gemini 3 Pro"]
