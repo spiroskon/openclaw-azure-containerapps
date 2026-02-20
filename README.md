@@ -1,38 +1,30 @@
 # OpenClaw on Azure Container Apps
 
-Deploy [OpenClaw](https://github.com/openclaw/openclaw) on Azure Container Apps — containerized, with GitHub Copilot as the LLM provider.
+<p align="center">
+  <img src="images/openclaw-azure.jpg" alt="OpenClaw on Azure Container Apps" width="800">
+</p>
 
-OpenClaw is an open-source AI agent that runs 24/7 — it can browse the web, execute tasks, manage files, and communicate through multiple channels. This guide deploys it on Azure with managed HTTPS, NFS-backed persistent storage, and no Docker Desktop required on your machine.
+Deploy [OpenClaw](https://github.com/openclaw/openclaw) on Azure Container Apps with GitHub Copilot as the LLM provider. No API keys to manage, no Docker Desktop required.
 
-## Who This Guide Is For
+## What is OpenClaw
 
-- Engineers deploying OpenClaw to Azure for the first time
-- Teams that want a reproducible Bicep-based deployment path
-- Practitioners who prefer GitHub Copilot auth over API key management
+[OpenClaw](https://openclaw.ai/) is an open-source, self-hosted personal AI assistant. You run a single Gateway process on your own machine or a server, and it connects your chat apps (WhatsApp, Telegram, Discord, Slack, Signal, iMessage, and others) to AI agents. It is designed for developers and power users who want a personal assistant they can message from anywhere, without giving up control of their data.
 
-## Time to Complete
+[![GitHub stars](https://img.shields.io/github/stars/openclaw/openclaw?style=social)](https://github.com/openclaw/openclaw) · [Docs](https://docs.openclaw.ai/) · [Source](https://github.com/openclaw/openclaw) · [DeepWiki](https://deepwiki.com/openclaw/openclaw)
 
-- Infrastructure deployment: **~5 minutes**
-- Build + app configuration: **~10 minutes**
-- Interactive Copilot auth + smoke test: **~5 minutes**
-- Total: **~20 minutes**
+## What this repo does
 
-## What Success Looks Like
+This repo provides a Bicep template and a PowerShell script that deploy OpenClaw to Azure Container Apps. GitHub Copilot authenticates via device flow with your existing GitHub account, so there are no API keys to manage. The container image builds remotely in Azure Container Registry, so no Docker Desktop is needed on your machine.
 
-By the end of this guide, you should have:
-
-- A running Azure Container Apps environment with HTTPS ingress
-- OpenClaw configured with persistent NFS-backed state
-- GitHub Copilot authenticated as the LLM provider
-- A working Control UI URL with token access
+The Bicep template creates the full Azure infrastructure (VNet, NFS storage with private endpoint, container registry, Container Apps environment). The deploy script builds the OpenClaw image from source, configures the gateway, and outputs a ready-to-use Control UI URL.
 
 ## Prerequisites
 
 - Azure CLI 2.80+ (`az version`)
-- Active Azure subscription (`az account show`)
+- An active Azure subscription (`az account show`)
 - Git
 
-Docker Desktop is **not required** — images are built remotely via `az acr build`.
+Docker Desktop is **not required**. Images are built remotely via `az acr build`.
 
 Verify resource providers are registered:
 
@@ -46,57 +38,30 @@ az provider show --namespace Microsoft.ManagedIdentity --query "registrationStat
 
 If any show `NotRegistered`: `az provider register --namespace <name>`.
 
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│ Azure Resource Group: rg-openclaw                               │
-│                                                                 │
-│  ┌──────────────────── VNet (10.1.0.0/26) ───────────────────┐  │
-│  │                                                            │  │
-│  │  ┌─ ACA subnet (/27) ───────────────────────────────────┐ │  │
-│  │  │  Container Apps Environment                           │ │  │
-│  │  │  ┌─────────────────────────────────────────────────┐  │ │  │
-│  │  │  │ ca-openclaw                                     │  │ │  │
-│  │  │  │ 2 vCPU / 4 GiB · Port 18789 · HTTPS ingress    │  │ │  │
-│  │  │  └───────────────────────┬─────────────────────────┘  │ │  │
-│  │  │                         │ NFS mount                    │ │  │
-│  │  └─────────────────────────┼──────────────────────────────┘ │  │
-│  │  ┌─ PE subnet (/28) ──────┼──────────────────────────────┐ │  │
-│  │  │  Private Endpoint ──────┘                              │ │  │
-│  │  └────────────────────────────────────────────────────────┘ │  │
-│  └────────────────────────────────────────────────────────────┘  │
-│                                                                 │
-│  ACR · Premium NFS Storage · Log Analytics                      │
-└─────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## Quick Deploy
+## Deploy
 
 ```powershell
-# 0. Clone this repo
+# 1. Clone this repo
 git clone https://github.com/spiroskon/openclaw-azure-containerapps.git
 cd openclaw-azure-containerapps
 
-# 1. Infrastructure (~5 min) — names are auto-generated, nothing to configure
+# 2. Deploy infrastructure (~5 min)
 az group create --name rg-openclaw --location swedencentral
 az deployment group create --resource-group rg-openclaw `
   --template-file bicep/main.bicep --parameters bicep/main.bicepparam
 
-# 2. Build + deploy + configure (~10 min) — clones source, builds image, configures gateway
+# 3. Build and configure OpenClaw (~10 min)
 .\deploy-openclaw.ps1 -ResourceGroup rg-openclaw
 
-# 3. GitHub Copilot auth (only interactive step)
+# 4. Authenticate GitHub Copilot (interactive, ~2 min)
 az containerapp exec --name ca-openclaw --resource-group rg-openclaw
-#   node openclaw.mjs models auth login-github-copilot    → device flow in browser
-#   exit
+#   node openclaw.mjs models auth login-github-copilot
+#   Follow the device flow in your browser, then type: exit
 ```
 
-Open the Control UI URL from the script output. Send a test message.
+Open the Control UI URL printed by the script. Send a test message.
 
-### Quick verification
+### Verify
 
 ```powershell
 az containerapp show --name ca-openclaw --resource-group rg-openclaw `
@@ -105,122 +70,183 @@ az containerapp show --name ca-openclaw --resource-group rg-openclaw `
 az containerapp logs show --name ca-openclaw --resource-group rg-openclaw --tail 20 --type console
 ```
 
-You should see a valid FQDN, an active latest revision, and gateway startup logs without crash loops.
+You should see a valid FQDN, an active revision, and gateway startup logs without crash loops.
 
-### What Bicep creates
+---
+
+## Architecture
+
+```mermaid
+flowchart TB
+    subgraph channels["Chat Channels"]
+        direction LR
+        wa(["WhatsApp"])
+        tg(["Telegram"])
+        dc(["Discord"])
+        sl(["Slack"])
+        more(["Signal · iMessage<br/>Teams · WebChat"])
+    end
+
+    cui(["Control UI"])
+
+    subgraph azure["Azure Container Apps"]
+        gw["OpenClaw Gateway<br/>2 vCPU · 4 GiB · HTTPS · Port 18789"]
+        nfs[("NFS Storage<br/>via Private Endpoint")]
+        acr["Container Registry"]
+        logs["Log Analytics"]
+        gw ---|persistent state| nfs
+    end
+
+    subgraph copilot["GitHub Copilot · One Subscription, All Models"]
+        direction LR
+        opus["Claude<br/>Opus 4.6"]
+        gpt["GPT-5.2"]
+        gem["Gemini<br/>3 Pro"]
+    end
+
+    channels <-->|messages| gw
+    cui <--> gw
+    gw <-->|inference| copilot
+
+    style channels fill:#f0fdf4,stroke:#16a34a,stroke-width:2px
+    style azure fill:#eff6ff,stroke:#2563eb,stroke-width:2px
+    style copilot fill:#faf5ff,stroke:#7c3aed,stroke-width:2px
+```
+
+This deployment configures `github-copilot/claude-opus-4.6` by default. GitHub Copilot provides access to models from Anthropic, OpenAI, Google, and xAI through a single subscription. Switch models after deployment with `node openclaw.mjs models set <model>`.
+
+<details>
+<summary>All available models (from <code>openclaw models list</code>)</summary>
+
+| Model | Provider |
+|-------|----------|
+| `github-copilot/claude-opus-4.6` | Anthropic (default) |
+| `github-copilot/claude-opus-4.5` | Anthropic |
+| `copilot-proxy/claude-sonnet-4.5` | Anthropic |
+| `copilot-proxy/claude-haiku-4.5` | Anthropic |
+| `copilot-proxy/gpt-5.2` | OpenAI |
+| `copilot-proxy/gpt-5.2-codex` | OpenAI |
+| `copilot-proxy/gpt-5.1` | OpenAI |
+| `copilot-proxy/gpt-5.1-codex` | OpenAI |
+| `copilot-proxy/gpt-5.1-codex-max` | OpenAI |
+| `copilot-proxy/gpt-5-mini` | OpenAI |
+| `copilot-proxy/gemini-3-pro` | Google |
+| `copilot-proxy/gemini-3-flash` | Google |
+| `copilot-proxy/grok-code-fast-1` | xAI |
+
+</details>
+
+### Resources created by Bicep
 
 | Resource | Type |
 |----------|------|
 | VNet + 2 subnets | `Microsoft.Network/virtualNetworks` |
 | Premium FileStorage + NFS share | `Microsoft.Storage/storageAccounts` |
-| Private endpoint + DNS | `Microsoft.Network/privateEndpoints` |
+| Private endpoint + DNS zone | `Microsoft.Network/privateEndpoints` |
 | Azure Container Registry | `Microsoft.ContainerRegistry/registries` |
-| Log Analytics Workspace | `Microsoft.OperationalInsights/workspaces` |
-| ACA Environment + NFS storage | `Microsoft.App/managedEnvironments` |
+| Log Analytics workspace | `Microsoft.OperationalInsights/workspaces` |
+| Container Apps Environment + NFS storage | `Microsoft.App/managedEnvironments` |
 | Container App (placeholder) | `Microsoft.App/containerApps` |
+
+Globally unique names (ACR, storage) are auto-generated using `uniqueString()`. No manual naming required.
 
 ### What the deploy script does
 
-1. Clones OpenClaw source (if not already present)
-2. Builds the image from source and pushes to ACR (~6 min)
-3. Generates a secure gateway token
-4. Updates the Container App with full config (image, NFS mount, startup command)
-5. Runs non-interactive onboard, sets model, enables Control UI access
-6. Outputs the Control UI URL with the token
+The script (`deploy-openclaw.ps1`) auto-discovers resource names from Bicep deployment outputs, then:
+
+1. Clones OpenClaw source from GitHub (if not already present)
+2. Builds the container image remotely via `az acr build` (~6 min)
+3. Generates a 256-bit gateway token
+4. Updates the Container App with the OpenClaw image, NFS volume mount, and startup command
+5. Runs non-interactive onboard and sets the model to `github-copilot/claude-opus-4.6`
+6. Outputs the Control UI URL with embedded token
 
 ---
 
-## Post-Deploy: Security Audit
+## Security
+
+Run the built-in security audit after deployment:
 
 ```powershell
 az containerapp exec --name ca-openclaw --resource-group rg-openclaw `
   --command "node openclaw.mjs security audit"
 ```
 
-| Finding | Severity | Verdict |
+| Finding | Severity | Context |
 |---------|----------|---------|
-| `allowInsecureAuth` enabled | CRITICAL | **Temporary** — needed for initial setup; removable via [device pairing](#optional-enable-device-pairing) |
-| State dir world-writable (777) | CRITICAL | **Cosmetic** — NFS mount root is 777; files inside are owned by `node` with correct permissions |
-| No auth rate limiting | WARN | **Accepted** — 256-bit token; brute force infeasible |
+| `allowInsecureAuth` enabled | CRITICAL | Required for initial setup. Removable through device pairing (below). |
+| State dir world-writable (777) | CRITICAL | NFS mount root defaults to 777. Files inside are owned by `node` with correct permissions. |
+| No auth rate limiting | WARN | 256-bit token makes brute force infeasible. |
 
-If you complete the [device pairing](#optional-enable-device-pairing) step below, the `allowInsecureAuth` finding goes away.
+### Device pairing (optional hardening)
 
----
-
-## Optional: Enable Device Pairing
-
-After verifying everything works, you can disable `allowInsecureAuth` and use proper device pairing. This removes the critical audit finding and enables cryptographic device identity for the Control UI.
-
-The trick: `az containerapp exec` runs inside the container, but the CLI connects via the LAN IP by default. Use `--url ws://127.0.0.1:18789 --token <TOKEN>` to connect via loopback, which the gateway treats as local.
+Disabling `allowInsecureAuth` switches the Control UI to cryptographic device pairing and removes the critical audit finding.
 
 ```powershell
-# 1. Get your gateway token (from deploy script output, or):
+# Get your gateway token
 az containerapp exec --name ca-openclaw --resource-group rg-openclaw `
   --command "printenv OPENCLAW_GATEWAY_TOKEN"
 
-# 2. Disable insecure auth
+# Disable insecure auth
 az containerapp exec --name ca-openclaw --resource-group rg-openclaw `
   --command "node openclaw.mjs config set gateway.controlUi.allowInsecureAuth false"
 
-# 3. Restart the container
+# Restart the container
 $rev = az containerapp show --name ca-openclaw --resource-group rg-openclaw `
   --query "properties.latestRevisionName" -o tsv
 az containerapp revision restart --revision $rev --resource-group rg-openclaw
 
-# 4. Open/refresh browser — you'll see "pairing required"
-#    This creates a pending device request
-
-# 5. Approve the browser device (via loopback inside the container)
+# Open/refresh the Control UI in your browser (creates a pending device request)
+# Then approve via loopback inside the container:
 az containerapp exec --name ca-openclaw --resource-group rg-openclaw `
   --command "node openclaw.mjs devices approve --latest --url ws://127.0.0.1:18789 --token <TOKEN>"
-
-# 6. Refresh browser — should connect. Device is now paired.
 ```
 
-**If something goes wrong**, re-enable insecure auth:
+If something breaks, re-enable insecure auth:
 
 ```powershell
 az containerapp exec --name ca-openclaw --resource-group rg-openclaw `
   --command "node openclaw.mjs config set gateway.controlUi.allowInsecureAuth true"
-# Restart revision as in step 3
+# Restart the revision as above
 ```
 
-> **Note:** Clearing browser data or switching browsers requires re-pairing (repeat steps 4-5).
+Clearing browser data or switching browsers requires re-pairing.
 
 ---
 
-## Key Design Decisions
+## Design decisions
 
-- **Azure Container Apps** over ACI/VM — managed ingress, auto-TLS, consumption pricing
-- **NFS over SMB** — NFS authenticates via network rules (private endpoint), bypassing `allowSharedKeyAccess: false` tenant policies
-- **Two-phase deploy** — Bicep (infrastructure + placeholder) then script (image build + app update)
-- **GitHub Copilot as LLM provider** — built-in provider with device flow auth, no API keys needed
+**Azure Container Apps over ACI or VMs.** Managed HTTPS ingress, automatic TLS, consumption-based pricing, built-in VNet integration. No load balancer or reverse proxy to configure.
+
+**NFS over SMB for persistent storage.** NFS authenticates via network rules through the private endpoint, which avoids the `allowSharedKeyAccess: false` restriction enforced by some Azure tenants. SMB would fail silently in those environments.
+
+**Two-phase deployment.** Bicep deploys infrastructure with a placeholder container (Microsoft's ACA quickstart image). This proves networking, storage, and ingress work before the deploy script builds the real image and swaps it in. Debugging is simpler when infra and app concerns are separated.
+
+**GitHub Copilot as LLM provider.** Device-flow OAuth with your existing GitHub account. No API keys to create, rotate, or store. The model (`claude-opus-4.6`) routes through the GitHub Copilot provider built into OpenClaw.
 
 ---
-
-## Manual CLI Reference
 
 <details>
-<summary>Deploy without Bicep — every Azure resource created individually (8 steps)</summary>
+<summary><strong>Manual CLI reference</strong> (deploy each resource individually)</summary>
 
-These steps show how each resource was originally configured. Every gotcha is already handled in the Bicep template.
+These commands show how each Azure resource was originally configured. Every gotcha is already handled in the Bicep template.
 
-### Step 1: Create Resource Group
+### Step 1: Resource group
 
 ```powershell
 az group create --name rg-openclaw --location swedencentral
 ```
 
-### Step 2: Create Azure Container Registry
+### Step 2: Container registry
 
 ```powershell
 az acr create --name <your-acr-name> --resource-group rg-openclaw `
   --sku Basic --admin-enabled true --location swedencentral
 ```
 
-**Gotcha**: ACR names must be globally unique. Check with `az acr check-name --name <name>`.
+ACR names must be globally unique. Check with `az acr check-name --name <name>`.
 
-### Step 3: Clone source and build image
+### Step 3: Build image from source
 
 ```powershell
 git clone https://github.com/openclaw/openclaw.git openclaw-repo
@@ -228,9 +254,9 @@ az acr build --registry <your-acr-name> --image openclaw:latest `
   --file openclaw-repo/Dockerfile openclaw-repo/
 ```
 
-### Step 4: Create networking + NFS storage
+### Step 4: Networking + NFS storage
 
-> **Why NFS?** Some tenants enforce `allowSharedKeyAccess: false`. NFS authenticates via network rules (private endpoint), bypassing the restriction.
+NFS is chosen over SMB because some tenants enforce `allowSharedKeyAccess: false`, which blocks ACA's SMB mount. NFS authenticates via network rules (private endpoint).
 
 ```powershell
 az network vnet create --resource-group rg-openclaw --name vnet-openclaw `
@@ -270,14 +296,14 @@ az network private-endpoint dns-zone-group create --resource-group rg-openclaw `
   --private-dns-zone "privatelink.file.core.windows.net" --zone-name file
 ```
 
-### Step 5: Create Log Analytics Workspace
+### Step 5: Log Analytics
 
 ```powershell
 az monitor log-analytics workspace create --resource-group rg-openclaw `
   --workspace-name law-openclaw --location swedencentral
 ```
 
-### Step 6: Create Container Apps Environment + NFS storage
+### Step 6: Container Apps Environment + NFS storage
 
 ```powershell
 $SUBNET_ID = (az network vnet subnet show --resource-group rg-openclaw `
@@ -303,7 +329,7 @@ az containerapp env storage set --name cae-openclaw --resource-group rg-openclaw
   --access-mode ReadWrite
 ```
 
-### Step 7: Create Container App
+### Step 7: Container App
 
 ```powershell
 $bytes = New-Object byte[] 32
@@ -322,7 +348,7 @@ az containerapp create --name ca-openclaw --resource-group rg-openclaw `
   --env-vars "OPENCLAW_GATEWAY_TOKEN=$GATEWAY_TOKEN" "NODE_ENV=production" "HOME=/home/node" "TERM=xterm-256color"
 ```
 
-Then add NFS volume mount via YAML update (see deploy script for exact structure).
+Then add NFS volume mount via YAML update (see deploy script for the exact structure).
 
 ### Step 8: Configure OpenClaw
 
@@ -346,23 +372,11 @@ exit
 
 ---
 
-## Cleanup
+## Known issues
 
-```powershell
-az group delete --name rg-openclaw --yes --no-wait
-```
+### "Conversation info (untrusted metadata)" in chat
 
-## Related
-
-- [OpenClaw Secure Docker Setup](https://github.com/spiroskon/openclaw-secure-docker) — run OpenClaw locally on Windows with Docker
-- [OpenClaw Official Docs](https://docs.openclaw.ai)
-- [OpenClaw GitHub](https://github.com/openclaw/openclaw)
-
-## Known Issues
-
-### "Conversation info (untrusted metadata)" displayed in chat
-
-OpenClaw 2026.2.17+ displays a metadata block in the Control UI chat for every user message:
+OpenClaw 2026.2.17+ displays a metadata block in the Control UI for every user message:
 
 ```
 Conversation info (untrusted metadata):
@@ -370,23 +384,35 @@ Conversation info (untrusted metadata):
 [timestamp] your message
 ```
 
-**This is not a security issue with this deployment.** It's an upstream UI bug introduced in [2026.2.17](https://github.com/openclaw/openclaw/releases/tag/v2026.2.17) — the gateway injects `message_id` metadata into user messages for LLM context, but the Control UI renders it verbatim instead of stripping it. The word "untrusted" refers to the gateway's security model (client-supplied metadata is never trusted), not to this deployment.
+This is an upstream UI bug, not a deployment issue. The gateway injects `message_id` metadata for LLM context, and the Control UI renders it verbatim instead of stripping it. "Untrusted" refers to the gateway's internal security model (client-supplied metadata is never trusted).
 
-**Status:** Open upstream issues [#13989](https://github.com/openclaw/openclaw/issues/13989) and [#20297](https://github.com/openclaw/openclaw/issues/20297). Fix PRs [#14045](https://github.com/openclaw/openclaw/pull/14045) and [#15998](https://github.com/openclaw/openclaw/pull/15998) are pending merge. Expected to be resolved in a future release.
+Tracked in [#13989](https://github.com/openclaw/openclaw/issues/13989) and [#20297](https://github.com/openclaw/openclaw/issues/20297). Fix PRs [#14045](https://github.com/openclaw/openclaw/pull/14045) and [#15998](https://github.com/openclaw/openclaw/pull/15998) are pending merge.
 
-**Workaround:** Pin to `v2026.2.15` tag when building the OpenClaw image to avoid the issue.
+**Workaround:** Pin to `v2026.2.15` when building the image.
 
 ---
 
-## Tested With
+## Cleanup
+
+```powershell
+az group delete --name rg-openclaw --yes --no-wait
+```
+
+## Tested with
 
 | Component | Version |
-|-----------|--------|
+|-----------|---------|
 | OpenClaw | Latest from `main` branch (Feb 2026) |
 | Azure CLI | 2.80+ |
 | Bicep | Built-in with Azure CLI |
 | Region | Sweden Central |
 | LLM | `github-copilot/claude-opus-4.6` |
+
+## Related
+
+- [OpenClaw Secure Docker Setup](https://github.com/spiroskon/openclaw-secure-docker) for running locally on Windows
+- [OpenClaw Docs](https://docs.openclaw.ai/)
+- [OpenClaw GitHub](https://github.com/openclaw/openclaw)
 
 ## License
 
