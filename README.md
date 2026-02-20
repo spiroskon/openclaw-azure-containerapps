@@ -78,38 +78,32 @@ You should see a valid FQDN, an active revision, and gateway startup logs withou
 
 ```mermaid
 flowchart TB
-    subgraph channels["Chat Channels"]
-        direction LR
-        wa(["WhatsApp"])
-        tg(["Telegram"])
-        dc(["Discord"])
-        sl(["Slack"])
-        more(["Signal · iMessage<br/>Teams · WebChat"])
+    cui(["Control UI (browser)"])
+    ch(["WhatsApp · Telegram · Discord · Slack · more"])
+    cui <-->|HTTPS| gw
+    ch -.-|configurable| gw
+
+    subgraph azure["rg-openclaw"]
+        subgraph vnet["vnet-openclaw · 10.1.0.0/26"]
+            gw["ca-openclaw · OpenClaw Gateway<br/>snet-aca /27 · 2 vCPU · 4 GiB · Port 18789"]
+            pe["pep-storage · snet-pe /28"]
+        end
+        gw ---|NFS mount| pe
+        pe --- nfs[("Premium NFS Storage<br/>openclaw-state")]
+        acr["Azure Container Registry"] ~~~ logs["Log Analytics"]
     end
 
-    cui(["Control UI"])
+    gw <-->|GitHub Copilot API| copilot
 
-    subgraph azure["Azure Container Apps"]
-        gw["OpenClaw Gateway<br/>2 vCPU · 4 GiB · HTTPS · Port 18789"]
-        nfs[("NFS Storage<br/>via Private Endpoint")]
-        acr["Container Registry"]
-        logs["Log Analytics"]
-        gw ---|persistent state| nfs
-    end
-
-    subgraph copilot["GitHub Copilot · One Subscription, All Models"]
-        direction LR
-        opus["Claude<br/>Opus 4.6"]
+    subgraph copilot["GitHub Copilot · One Subscription"]
+        opus["Claude Opus 4.6"]
         gpt["GPT-5.2"]
-        gem["Gemini<br/>3 Pro"]
+        gem["Gemini 3 Pro"]
+        more2["+ 7 more models"]
     end
 
-    channels <-->|messages| gw
-    cui <--> gw
-    gw <-->|inference| copilot
-
-    style channels fill:#f0fdf4,stroke:#16a34a,stroke-width:2px
     style azure fill:#eff6ff,stroke:#2563eb,stroke-width:2px
+    style vnet fill:#dbeafe,stroke:#3b82f6,stroke-width:1px
     style copilot fill:#faf5ff,stroke:#7c3aed,stroke-width:2px
 ```
 
@@ -120,14 +114,11 @@ This deployment configures `github-copilot/claude-opus-4.6` by default. GitHub C
 
 | Model | Provider |
 |-------|----------|
-| `github-copilot/claude-opus-4.6` | Anthropic (default) |
-| `github-copilot/claude-opus-4.5` | Anthropic |
+| `github-copilot/claude-opus-4.6` | Anthropic |
 | `copilot-proxy/claude-sonnet-4.5` | Anthropic |
 | `copilot-proxy/claude-haiku-4.5` | Anthropic |
 | `copilot-proxy/gpt-5.2` | OpenAI |
 | `copilot-proxy/gpt-5.2-codex` | OpenAI |
-| `copilot-proxy/gpt-5.1` | OpenAI |
-| `copilot-proxy/gpt-5.1-codex` | OpenAI |
 | `copilot-proxy/gpt-5.1-codex-max` | OpenAI |
 | `copilot-proxy/gpt-5-mini` | OpenAI |
 | `copilot-proxy/gemini-3-pro` | Google |
